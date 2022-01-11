@@ -30,6 +30,7 @@ import com.graphhopper.util.GHUtility;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.PriorityQueue;
 import java.util.function.Consumer;
 
@@ -125,14 +126,22 @@ public class ShortestPathTree extends AbstractRoutingAlgorithm {
     }
 
     public void search(int from, final Consumer<IsoLabel> consumer) {
+        List<Integer> fromList = new ArrayList<Integer>();
+        fromList.add(from);
+        search(fromList, consumer);
+    }
+
+    public void search(List<Integer> from, final Consumer<IsoLabel> consumer) {
         checkAlreadyRun();
-        IsoLabel currentLabel = new IsoLabel(from, -1, 0, 0, 0, null);
-        queueByWeighting.add(currentLabel);
-        if (traversalMode == TraversalMode.NODE_BASED) {
-            fromMap.put(from, currentLabel);
+        for (int node : from) {
+            IsoLabel currentLabel = new IsoLabel(node, -1, 0, 0, 0, null);
+            queueByWeighting.add(currentLabel);
+            if (traversalMode == TraversalMode.NODE_BASED) {
+                fromMap.put(node, currentLabel);
+            }
         }
         while (!finished()) {
-            currentLabel = queueByWeighting.poll();
+            IsoLabel currentLabel = queueByWeighting.poll();
             if (currentLabel.deleted)
                 continue;
             consumer.accept(currentLabel);

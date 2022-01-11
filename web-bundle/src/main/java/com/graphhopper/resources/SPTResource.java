@@ -143,7 +143,7 @@ public class SPTResource {
                 }
                 sb.append(LINE_SEP);
                 writer.write(sb.toString());
-                shortestPathTree.search(snap.getClosestNode(), l -> {
+                shortestPathTree.search(new ArrayList(snap.getClosestNode()), l -> {
                     IsoLabelWithCoordinates label = isoLabelWithCoordinates(nodeAccess, l);
                     sb.setLength(0);
                     for (int colIndex = 0; colIndex < columns.size(); colIndex++) {
