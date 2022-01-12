@@ -16,5 +16,5 @@ if [ ! -f $osm_file_name ]; then
 	curl -o $osm_file_name 'https://download.geofabrik.de/europe/sweden-latest.osm.pbf'
 fi
 
-mvn package -DskipTests
+mvn clean package -DskipTests
 java -Xmx8g -jar web/target/graphhopper-web-*.jar server reader-gtfs/config-sweden.yml
