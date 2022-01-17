@@ -1,7 +1,7 @@
 graphhopper:
-  datareader.file: graphs/sweden/sweden-latest.osm.pbf
-  gtfs.file: graphs/sweden/sweden.gtfs.zip
-  graph.location: graphs/sweden-with-transit
+  datareader.file: sweden/source/sweden-latest.osm.pbf
+  gtfs.file: sweden/source/sweden.gtfs.zip
+  graph.location: sweden/sweden-with-transit
 
   profiles:
     - name: foot
