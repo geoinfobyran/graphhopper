@@ -13,6 +13,12 @@ public class CoordinateWithTime implements Comparable<CoordinateWithTime> {
         this.time_in_seconds = time_in_seconds;
     }
 
+    public CoordinateWithTime(double lat, double lng, double time_in_seconds) {
+        this.lat = lat;
+        this.lng = lng;
+        this.time_in_seconds = time_in_seconds;
+    }
+
     @Override
     public int compareTo(CoordinateWithTime other) {
         return Double.compare(time_in_seconds, other.time_in_seconds);

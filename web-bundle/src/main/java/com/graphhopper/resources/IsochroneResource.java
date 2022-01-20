@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.graphhopper.GraphHopper;
 import com.graphhopper.config.Profile;
 import com.graphhopper.http.GHPointParam;
+import com.graphhopper.storage.NodeAccess;
 import com.graphhopper.isochrone.algorithm.ContourBuilder;
 import com.graphhopper.isochrone.algorithm.ShortestPathTree;
 import com.graphhopper.isochrone.algorithm.Triangulator;
@@ -38,7 +39,9 @@ import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.function.ToDoubleFunction;
 
@@ -64,11 +67,17 @@ public class IsochroneResource {
         this.profileResolver = profileResolver;
     }
 
-    public enum ResponseType {json, geojson}
+    public enum ResponseType {
+        json, geojson
+    }
+
+    public static class ResponseWithTimes {
+        public SegmentWithTime[] segments;
+    }
 
     @GET
     @Produces(MediaType.APPLICATION_JSON)
-    public Response doGet(
+    public ResponseWithTimes doGet(
             @Context UriInfo uriInfo,
             @QueryParam("profile") String profileName,
             @QueryParam("buckets") @Range(min = 1, max = 20) @DefaultValue("1") IntParam nBuckets,
@@ -97,18 +106,21 @@ public class IsochroneResource {
         LocationIndex locationIndex = graphHopper.getLocationIndex();
         Graph graph = graphHopper.getGraphHopperStorage();
         Weighting weighting = graphHopper.createWeighting(profile, hintsMap);
-        BooleanEncodedValue inSubnetworkEnc = graphHopper.getEncodingManager().getBooleanEncodedValue(Subnetwork.key(profileName));
+        BooleanEncodedValue inSubnetworkEnc = graphHopper.getEncodingManager()
+                .getBooleanEncodedValue(Subnetwork.key(profileName));
         if (hintsMap.has(Parameters.Routing.BLOCK_AREA)) {
             GraphEdgeIdFinder.BlockArea blockArea = GraphEdgeIdFinder.createBlockArea(graph, locationIndex,
                     Collections.singletonList(point.get()), hintsMap, new FiniteWeightFilter(weighting));
             weighting = new BlockAreaWeighting(weighting, blockArea);
         }
-        Snap snap = locationIndex.findClosest(point.get().lat, point.get().lon, new DefaultSnapFilter(weighting, inSubnetworkEnc));
+        Snap snap = locationIndex.findClosest(point.get().lat, point.get().lon,
+                new DefaultSnapFilter(weighting, inSubnetworkEnc));
         if (!snap.isValid())
             throw new IllegalArgumentException("Point not found:" + point);
         QueryGraph queryGraph = QueryGraph.create(graph, snap);
         TraversalMode traversalMode = profile.isTurnCosts() ? EDGE_BASED : NODE_BASED;
-        ShortestPathTree shortestPathTree = new ShortestPathTree(queryGraph, queryGraph.wrapWeighting(weighting), reverseFlow, traversalMode);
+        ShortestPathTree shortestPathTree = new ShortestPathTree(queryGraph, queryGraph.wrapWeighting(weighting),
+                reverseFlow, traversalMode);
 
         double limit;
         if (weightLimit.get() > 0) {
@@ -136,51 +148,50 @@ public class IsochroneResource {
             fz = l -> l.time;
         }
 
-        Triangulator.Result result = triangulator.triangulate(snap, queryGraph, shortestPathTree, fz, degreesFromMeters(toleranceInMeter));
+        final NodeAccess na = queryGraph.getNodeAccess();
+        Collection<Coordinate> sites = new ArrayList<>();
+        Collection<SegmentWithTime> segments = new ArrayList<>();
+        shortestPathTree.search(snap.getClosestNode(), label -> {
+            double exploreValue = fz.applyAsDouble(label);
+            double lat = na.getLat(label.node);
+            double lon = na.getLon(label.node);
+            Coordinate site = new Coordinate(lon, lat);
+            site.z = exploreValue;
+            sites.add(site);
 
-        ContourBuilder contourBuilder = new ContourBuilder(result.triangulation);
-        ArrayList<Geometry> isochrones = new ArrayList<>();
-        for (Double z : zs) {
-            logger.info("Building contour z={}", z);
-            MultiPolygon isochrone = contourBuilder.computeIsoline(z, result.seedEdges);
-            if (fullGeometry) {
-                isochrones.add(isochrone);
-            } else {
-                Polygon maxPolygon = heuristicallyFindMainConnectedComponent(isochrone, isochrone.getFactory().createPoint(new Coordinate(point.get().lon, point.get().lat)));
-                isochrones.add(isochrone.getFactory().createPolygon(((LinearRing) maxPolygon.getExteriorRing())));
+            if (label.parent != null) {
+                double parentExploreValue = fz.applyAsDouble(label.parent);
+                EdgeIteratorState edge = queryGraph.getEdgeIteratorState(label.edge, label.node);
+                PointList points = edge.fetchWayGeometry(FetchMode.ALL);
+                for (int i = 0; i + 1 < points.size(); i++) {
+                    // TODO: Set time based on the distance between the nodes, rather than just based on the indices.
+                    CoordinateWithTime to = new CoordinateWithTime(
+                            points.getLat(i + 1),
+                            points.getLon(i + 1),
+                            (double) (parentExploreValue
+                                    + ((exploreValue - parentExploreValue) * (i + 1)) / points.size())
+                                    * (reverseFlow ? -1 : 1)
+                                    / 1000.0);
+                    CoordinateWithTime from = new CoordinateWithTime(
+                            points.getLat(i),
+                            points.getLon(i),
+                            (double) (parentExploreValue
+                                    + ((exploreValue - parentExploreValue) * i) / points.size())
+                                    * (reverseFlow ? -1 : 1)
+                                    / 1000.0);
+                    segments.add(new SegmentWithTime(from, to));
+                }
             }
-        }
-        ArrayList<JsonFeature> features = new ArrayList<>();
-        for (Geometry isochrone : isochrones) {
-            JsonFeature feature = new JsonFeature();
-            HashMap<String, Object> properties = new HashMap<>();
-            properties.put("bucket", features.size());
-            if (respType == geojson) {
-                properties.put("copyrights", ResponsePathSerializer.COPYRIGHTS);
-            }
-            feature.setProperties(properties);
-            feature.setGeometry(isochrone);
-            features.add(feature);
-        }
-        ObjectNode json = JsonNodeFactory.instance.objectNode();
-
-        sw.stop();
-        ObjectNode finalJson = null;
-        if (respType == geojson) {
-            json.put("type", "FeatureCollection");
-            json.putPOJO("features", features);
-            finalJson = json;
-        } else {
-            json.putPOJO("polygons", features);
-            final ObjectNode info = json.putObject("info");
-            info.putPOJO("copyrights", ResponsePathSerializer.COPYRIGHTS);
-            info.put("took", Math.round((float) sw.getMillis()));
-            finalJson = json;
-        }
-
+        });
         logger.info("took: " + sw.getSeconds() + ", visited nodes:" + shortestPathTree.getVisitedNodes());
-        return Response.ok(finalJson).header("X-GH-Took", "" + sw.getSeconds() * 1000).
-                build();
+        return wrapNodesWithTimes(segments.toArray(new SegmentWithTime[0]));
+    }
+
+    private ResponseWithTimes wrapNodesWithTimes(SegmentWithTime[] segments) {
+        Arrays.sort(segments);
+        ResponseWithTimes response = new ResponseWithTimes();
+        response.segments = segments;
+        return response;
     }
 
     private Polygon heuristicallyFindMainConnectedComponent(MultiPolygon multiPolygon, Point point) {
@@ -200,8 +211,10 @@ public class IsochroneResource {
     }
 
     /**
-     * We want to specify a tolerance in something like meters, but we need it in unprojected lat/lon-space.
-     * This is more correct in some parts of the world, and in some directions, than in others.
+     * We want to specify a tolerance in something like meters, but we need it in
+     * unprojected lat/lon-space.
+     * This is more correct in some parts of the world, and in some directions, than
+     * in others.
      *
      * @param distanceInMeters distance in meters
      * @return "distance" in degrees
