@@ -162,24 +162,30 @@ public class IsochroneResource {
             if (label.parent != null) {
                 double parentExploreValue = fz.applyAsDouble(label.parent);
                 EdgeIteratorState edge = queryGraph.getEdgeIteratorState(label.edge, label.node);
-                PointList points = edge.fetchWayGeometry(FetchMode.ALL);
-                for (int i = 0; i + 1 < points.size(); i++) {
-                    // TODO: Set time based on the distance between the nodes, rather than just based on the indices.
-                    CoordinateWithTime to = new CoordinateWithTime(
-                            points.getLat(i + 1),
-                            points.getLon(i + 1),
-                            (double) (parentExploreValue
-                                    + ((exploreValue - parentExploreValue) * (i + 1)) / points.size())
-                                    * (reverseFlow ? -1 : 1)
-                                    / 1000.0);
-                    CoordinateWithTime from = new CoordinateWithTime(
-                            points.getLat(i),
-                            points.getLon(i),
-                            (double) (parentExploreValue
-                                    + ((exploreValue - parentExploreValue) * i) / points.size())
-                                    * (reverseFlow ? -1 : 1)
-                                    / 1000.0);
-                    segments.add(new SegmentWithTime(from, to));
+                ArrayList<CoordinateWithTime> coordinates = new ArrayList<>();
+                double t1 = parentExploreValue
+                                * (reverseFlow ? -1 : 1)
+                                / 1000.0;
+                double t2 = exploreValue
+                                * (reverseFlow ? -1 : 1)
+                                / 1000.0;
+                coordinates.add(new CoordinateWithTime(
+                        na.getLat(label.parent.node),
+                        na.getLon(label.parent.node),
+                        t1));
+                PointList points = edge.fetchWayGeometry(FetchMode.PILLAR_ONLY);
+                for (int i = 0; i < points.size(); i++) {
+                    coordinates.add(new CoordinateWithTime(
+                        points.getLat(i),
+                        points.getLon(i),
+                        (t1 * (points.size() + 1 - i))/(points.size() + 1) + (t2 * (i+1))/(points.size() + 1)));
+                }
+                coordinates.add(new CoordinateWithTime(
+                        lat,
+                        lon,
+                        t2));
+                for (int i = 0; i+1 < coordinates.size(); i++) {
+                    segments.add(new SegmentWithTime(coordinates.get(i), coordinates.get(i+1)));
                 }
             }
         });
