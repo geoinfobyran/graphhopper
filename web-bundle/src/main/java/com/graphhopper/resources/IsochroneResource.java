@@ -178,7 +178,7 @@ public class IsochroneResource {
                     coordinates.add(new CoordinateWithTime(
                         points.getLat(i),
                         points.getLon(i),
-                        (t1 * (points.size() + 1 - i))/(points.size() + 1) + (t2 * (i+1))/(points.size() + 1)));
+                        (t1 * (points.size() - i))/(points.size() + 1) + (t2 * (i+1))/(points.size() + 1)));
                 }
                 coordinates.add(new CoordinateWithTime(
                         lat,
