@@ -6,6 +6,10 @@ graphhopper:
     - name: car
       vehicle: car
       weighting: fastest
+  profiles:
+    - name: foot
+      vehicle: foot
+      weighting: fastest
 
 server:
   application_connectors:

@@ -24,6 +24,9 @@ import com.graphhopper.storage.GraphEdgeIdFinder;
 import com.graphhopper.storage.index.LocationIndex;
 import com.graphhopper.storage.index.Snap;
 import com.graphhopper.util.*;
+import com.graphhopper.util.shapes.GHPoint;
+
+import io.dropwizard.jersey.params.AbstractParam;
 import io.dropwizard.jersey.params.IntParam;
 import io.dropwizard.jersey.params.LongParam;
 import org.hibernate.validator.constraints.Range;
@@ -43,13 +46,45 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.function.ToDoubleFunction;
 
-import static com.graphhopper.resources.IsochroneResource.ResponseType.geojson;
 import static com.graphhopper.resources.RouteResource.errorIfLegacyParameters;
-import static com.graphhopper.resources.RouteResource.removeLegacyParameters;
 import static com.graphhopper.routing.util.TraversalMode.EDGE_BASED;
 import static com.graphhopper.routing.util.TraversalMode.NODE_BASED;
+
+class IsochroneRequest {
+    private List<GHPoint> points;
+    private String profileName;
+    private long timeLimitInSeconds;
+
+    public IsochroneRequest setPoints(List<GHPoint> points) {
+        this.points = points;
+        return this;
+    }
+
+    public List<GHPoint> getPoints() {
+        return points;
+    }
+
+    public IsochroneRequest setProfileName(String profileName) {
+        this.profileName = profileName;
+        return this;
+    }
+
+    public String getProfileName() {
+        return profileName;
+    }
+
+    public IsochroneRequest setTimeLimitInSeconds(long timeLimitInSeconds) {
+        this.timeLimitInSeconds = timeLimitInSeconds;
+        return this;
+    }
+
+    public long getTimeLimitInSeconds() {
+        return timeLimitInSeconds;
+    }
+}
 
 @Path("isochrone")
 public class IsochroneResource {
@@ -75,83 +110,53 @@ public class IsochroneResource {
         public SegmentWithTime[] segments;
     }
 
-    @GET
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public ResponseWithTimes doGet(
-            @Context UriInfo uriInfo,
-            @QueryParam("profile") String profileName,
-            @QueryParam("buckets") @Range(min = 1, max = 20) @DefaultValue("1") IntParam nBuckets,
-            @QueryParam("reverse_flow") @DefaultValue("false") boolean reverseFlow,
-            @QueryParam("point") @NotNull GHPointParam point,
-            @QueryParam("time_limit") @DefaultValue("600") LongParam timeLimitInSeconds,
-            @QueryParam("distance_limit") @DefaultValue("-1") LongParam distanceLimitInMeter,
-            @QueryParam("weight_limit") @DefaultValue("-1") LongParam weightLimit,
-            @QueryParam("type") @DefaultValue("json") ResponseType respType,
-            @QueryParam("tolerance") @DefaultValue("0") double toleranceInMeter,
-            @QueryParam("full_geometry") @DefaultValue("false") boolean fullGeometry) {
+    public ResponseWithTimes doPost(@NotNull IsochroneRequest request) {
         StopWatch sw = new StopWatch().start();
         PMap hintsMap = new PMap();
-        RouteResource.initHints(hintsMap, uriInfo.getQueryParameters());
         hintsMap.putObject(Parameters.CH.DISABLE, true);
         hintsMap.putObject(Parameters.Landmark.DISABLE, true);
-        if (Helper.isEmpty(profileName)) {
-            profileName = profileResolver.resolveProfile(hintsMap).getName();
-            removeLegacyParameters(hintsMap);
-        }
         errorIfLegacyParameters(hintsMap);
 
-        Profile profile = graphHopper.getProfile(profileName);
+        Profile profile = graphHopper.getProfile(request.getProfileName());
         if (profile == null)
-            throw new IllegalArgumentException("The requested profile '" + profileName + "' does not exist");
+            throw new IllegalArgumentException("The requested profile '" + request.getProfileName() + "' does not exist");
         LocationIndex locationIndex = graphHopper.getLocationIndex();
         Graph graph = graphHopper.getGraphHopperStorage();
         Weighting weighting = graphHopper.createWeighting(profile, hintsMap);
         BooleanEncodedValue inSubnetworkEnc = graphHopper.getEncodingManager()
-                .getBooleanEncodedValue(Subnetwork.key(profileName));
-        if (hintsMap.has(Parameters.Routing.BLOCK_AREA)) {
-            GraphEdgeIdFinder.BlockArea blockArea = GraphEdgeIdFinder.createBlockArea(graph, locationIndex,
-                    Collections.singletonList(point.get()), hintsMap, new FiniteWeightFilter(weighting));
-            weighting = new BlockAreaWeighting(weighting, blockArea);
+                .getBooleanEncodedValue(Subnetwork.key(request.getProfileName()));
+        assert(!hintsMap.has(Parameters.Routing.BLOCK_AREA));
+        List<Snap> snaps = new ArrayList<Snap>();
+        for (GHPoint point : request.getPoints()) {
+            Snap snap = locationIndex.findClosest(point.lat, point.lon,
+                    new DefaultSnapFilter(weighting, inSubnetworkEnc));
+            if (!snap.isValid())
+                throw new IllegalArgumentException("Point not found:" + point);
+            snaps.add(snap);
         }
-        Snap snap = locationIndex.findClosest(point.get().lat, point.get().lon,
-                new DefaultSnapFilter(weighting, inSubnetworkEnc));
-        if (!snap.isValid())
-            throw new IllegalArgumentException("Point not found:" + point);
-        QueryGraph queryGraph = QueryGraph.create(graph, snap);
+        QueryGraph queryGraph = QueryGraph.create(graph, snaps);
         TraversalMode traversalMode = profile.isTurnCosts() ? EDGE_BASED : NODE_BASED;
         ShortestPathTree shortestPathTree = new ShortestPathTree(queryGraph, queryGraph.wrapWeighting(weighting),
-                reverseFlow, traversalMode);
+                false, traversalMode);
 
-        double limit;
-        if (weightLimit.get() > 0) {
-            limit = weightLimit.get();
-            shortestPathTree.setWeightLimit(limit + Math.max(limit * 0.14, 2_000));
-        } else if (distanceLimitInMeter.get() > 0) {
-            limit = distanceLimitInMeter.get();
-            shortestPathTree.setDistanceLimit(limit + Math.max(limit * 0.14, 2_000));
-        } else {
-            limit = timeLimitInSeconds.get() * 1000;
-            shortestPathTree.setTimeLimit(limit + Math.max(limit * 0.14, 200_000));
-        }
+        double limit = request.getTimeLimitInSeconds() * 1000;
+        shortestPathTree.setTimeLimit(limit + Math.max(limit * 0.14, 200_000));
         ArrayList<Double> zs = new ArrayList<>();
-        double delta = limit / nBuckets.get();
-        for (int i = 0; i < nBuckets.get(); i++) {
-            zs.add((i + 1) * delta);
-        }
+        zs.add(limit);
 
-        ToDoubleFunction<ShortestPathTree.IsoLabel> fz;
-        if (weightLimit.get() > 0) {
-            fz = l -> l.weight;
-        } else if (distanceLimitInMeter.get() > 0) {
-            fz = l -> l.distance;
-        } else {
-            fz = l -> l.time;
-        }
+        ToDoubleFunction<ShortestPathTree.IsoLabel> fz = l -> l.time;
 
         final NodeAccess na = queryGraph.getNodeAccess();
+        List<Integer> fromNodes = new ArrayList<Integer>();
+        for (Snap snap : snaps) {
+            fromNodes.add(snap.getClosestNode());
+        }
         Collection<Coordinate> sites = new ArrayList<>();
         Collection<SegmentWithTime> segments = new ArrayList<>();
-        shortestPathTree.search(snap.getClosestNode(), label -> {
+        shortestPathTree.search(fromNodes, label -> {
             double exploreValue = fz.applyAsDouble(label);
             double lat = na.getLat(label.node);
             double lon = na.getLon(label.node);
@@ -164,11 +169,9 @@ public class IsochroneResource {
                 EdgeIteratorState edge = queryGraph.getEdgeIteratorState(label.edge, label.node);
                 ArrayList<CoordinateWithTime> coordinates = new ArrayList<>();
                 double t1 = parentExploreValue
-                                * (reverseFlow ? -1 : 1)
-                                / 1000.0;
+                        / 1000.0;
                 double t2 = exploreValue
-                                * (reverseFlow ? -1 : 1)
-                                / 1000.0;
+                        / 1000.0;
                 coordinates.add(new CoordinateWithTime(
                         na.getLat(label.parent.node),
                         na.getLon(label.parent.node),
@@ -176,16 +179,16 @@ public class IsochroneResource {
                 PointList points = edge.fetchWayGeometry(FetchMode.PILLAR_ONLY);
                 for (int i = 0; i < points.size(); i++) {
                     coordinates.add(new CoordinateWithTime(
-                        points.getLat(i),
-                        points.getLon(i),
-                        (t1 * (points.size() - i))/(points.size() + 1) + (t2 * (i+1))/(points.size() + 1)));
+                            points.getLat(i),
+                            points.getLon(i),
+                            (t1 * (points.size() - i)) / (points.size() + 1) + (t2 * (i + 1)) / (points.size() + 1)));
                 }
                 coordinates.add(new CoordinateWithTime(
                         lat,
                         lon,
                         t2));
-                for (int i = 0; i+1 < coordinates.size(); i++) {
-                    segments.add(new SegmentWithTime(coordinates.get(i), coordinates.get(i+1)));
+                for (int i = 0; i + 1 < coordinates.size(); i++) {
+                    segments.add(new SegmentWithTime(coordinates.get(i), coordinates.get(i + 1)));
                 }
             }
         });
