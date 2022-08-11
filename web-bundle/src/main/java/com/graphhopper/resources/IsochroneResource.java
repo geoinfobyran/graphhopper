@@ -2,7 +2,9 @@ package com.graphhopper.resources;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.graphhopper.GHRequest;
 import com.graphhopper.GraphHopper;
+import com.graphhopper.IsochroneRequest;
 import com.graphhopper.config.Profile;
 import com.graphhopper.http.GHPointParam;
 import com.graphhopper.storage.NodeAccess;
@@ -52,39 +54,6 @@ import java.util.function.ToDoubleFunction;
 import static com.graphhopper.resources.RouteResource.errorIfLegacyParameters;
 import static com.graphhopper.routing.util.TraversalMode.EDGE_BASED;
 import static com.graphhopper.routing.util.TraversalMode.NODE_BASED;
-
-class IsochroneRequest {
-    private List<GHPoint> points;
-    private String profileName;
-    private long timeLimitInSeconds;
-
-    public IsochroneRequest setPoints(List<GHPoint> points) {
-        this.points = points;
-        return this;
-    }
-
-    public List<GHPoint> getPoints() {
-        return points;
-    }
-
-    public IsochroneRequest setProfileName(String profileName) {
-        this.profileName = profileName;
-        return this;
-    }
-
-    public String getProfileName() {
-        return profileName;
-    }
-
-    public IsochroneRequest setTimeLimitInSeconds(long timeLimitInSeconds) {
-        this.timeLimitInSeconds = timeLimitInSeconds;
-        return this;
-    }
-
-    public long getTimeLimitInSeconds() {
-        return timeLimitInSeconds;
-    }
-}
 
 @Path("isochrone")
 public class IsochroneResource {

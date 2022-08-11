@@ -125,6 +125,12 @@ public class ShortestPathTree extends AbstractRoutingAlgorithm {
         this.limit = limit;
     }
 
+    public void search(int from, final Consumer<IsoLabel> consumer) {
+        List<Integer> fromList = new ArrayList<Integer>();
+        fromList.add(from);
+        search(fromList, consumer);
+    }
+
     public void search(List<Integer> from, final Consumer<IsoLabel> consumer) {
         checkAlreadyRun();
         for (int node : from) {
