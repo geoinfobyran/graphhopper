@@ -75,14 +75,14 @@ public class IsochroneResource {
         json, geojson
     }
 
-    public static class ResponseWithTimes {
-        public SegmentWithTime[] segments;
+    public static class ResponseWithCosts {
+        public SegmentWithCost[] segments;
     }
 
     @POST
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public ResponseWithTimes doPost(@NotNull IsochroneRequest request) {
+    public ResponseWithCosts doPost(@NotNull IsochroneRequest request) {
         StopWatch sw = new StopWatch().start();
         PMap hintsMap = new PMap();
         hintsMap.putObject(Parameters.CH.DISABLE, true);
@@ -91,13 +91,14 @@ public class IsochroneResource {
 
         Profile profile = graphHopper.getProfile(request.getProfileName());
         if (profile == null)
-            throw new IllegalArgumentException("The requested profile '" + request.getProfileName() + "' does not exist");
+            throw new IllegalArgumentException(
+                    "The requested profile '" + request.getProfileName() + "' does not exist");
         LocationIndex locationIndex = graphHopper.getLocationIndex();
         Graph graph = graphHopper.getGraphHopperStorage();
         Weighting weighting = graphHopper.createWeighting(profile, hintsMap);
         BooleanEncodedValue inSubnetworkEnc = graphHopper.getEncodingManager()
                 .getBooleanEncodedValue(Subnetwork.key(request.getProfileName()));
-        assert(!hintsMap.has(Parameters.Routing.BLOCK_AREA));
+        assert (!hintsMap.has(Parameters.Routing.BLOCK_AREA));
         List<Snap> snaps = new ArrayList<Snap>();
         for (GHPoint point : request.getPoints()) {
             Snap snap = locationIndex.findClosest(point.lat, point.lon,
@@ -111,12 +112,23 @@ public class IsochroneResource {
         ShortestPathTree shortestPathTree = new ShortestPathTree(queryGraph, queryGraph.wrapWeighting(weighting),
                 false, traversalMode);
 
-        double limit = request.getTimeLimitInSeconds() * 1000;
-        shortestPathTree.setTimeLimit(limit + Math.max(limit * 0.14, 200_000));
+        double limit;
+        double normalization_factor;
+        ToDoubleFunction<ShortestPathTree.IsoLabel> fz;
+        if (request.getDistanceLimitInMeters() > 0) {
+            normalization_factor = 1.0;
+            limit = request.getDistanceLimitInMeters();
+            shortestPathTree.setDistanceLimit(limit);
+            fz = l -> l.distance;
+        } else {
+            normalization_factor = 0.001;
+            limit = request.getTimeLimitInSeconds() / normalization_factor;
+            shortestPathTree.setTimeLimit(limit);
+            fz = l -> l.time;
+        }
+        assert (limit > 0);
         ArrayList<Double> zs = new ArrayList<>();
         zs.add(limit);
-
-        ToDoubleFunction<ShortestPathTree.IsoLabel> fz = l -> l.time;
 
         final NodeAccess na = queryGraph.getNodeAccess();
         List<Integer> fromNodes = new ArrayList<Integer>();
@@ -124,7 +136,7 @@ public class IsochroneResource {
             fromNodes.add(snap.getClosestNode());
         }
         Collection<Coordinate> sites = new ArrayList<>();
-        Collection<SegmentWithTime> segments = new ArrayList<>();
+        Collection<SegmentWithCost> segments = new ArrayList<>();
         shortestPathTree.search(fromNodes, label -> {
             double exploreValue = fz.applyAsDouble(label);
             double lat = na.getLat(label.node);
@@ -133,41 +145,40 @@ public class IsochroneResource {
             site.z = exploreValue;
             sites.add(site);
 
+            // TODO: Visit all edges, not just tree edges.
             if (label.parent != null) {
                 double parentExploreValue = fz.applyAsDouble(label.parent);
                 EdgeIteratorState edge = queryGraph.getEdgeIteratorState(label.edge, label.node);
-                ArrayList<CoordinateWithTime> coordinates = new ArrayList<>();
-                double t1 = parentExploreValue
-                        / 1000.0;
-                double t2 = exploreValue
-                        / 1000.0;
-                coordinates.add(new CoordinateWithTime(
+                ArrayList<CoordinateWithCost> coordinates = new ArrayList<>();
+                double c1 = parentExploreValue * normalization_factor;
+                double c2 = exploreValue * normalization_factor;
+                coordinates.add(new CoordinateWithCost(
                         na.getLat(label.parent.node),
                         na.getLon(label.parent.node),
-                        t1));
+                        c1));
                 PointList points = edge.fetchWayGeometry(FetchMode.PILLAR_ONLY);
                 for (int i = 0; i < points.size(); i++) {
-                    coordinates.add(new CoordinateWithTime(
+                    coordinates.add(new CoordinateWithCost(
                             points.getLat(i),
                             points.getLon(i),
-                            (t1 * (points.size() - i)) / (points.size() + 1) + (t2 * (i + 1)) / (points.size() + 1)));
+                            (c1 * (points.size() - i)) / (points.size() + 1) + (c2 * (i + 1)) / (points.size() + 1)));
                 }
-                coordinates.add(new CoordinateWithTime(
+                coordinates.add(new CoordinateWithCost(
                         lat,
                         lon,
-                        t2));
+                        c2));
                 for (int i = 0; i + 1 < coordinates.size(); i++) {
-                    segments.add(new SegmentWithTime(coordinates.get(i), coordinates.get(i + 1)));
+                    segments.add(new SegmentWithCost(coordinates.get(i), coordinates.get(i + 1)));
                 }
             }
         });
         logger.info("took: " + sw.getSeconds() + ", visited nodes:" + shortestPathTree.getVisitedNodes());
-        return wrapNodesWithTimes(segments.toArray(new SegmentWithTime[0]));
+        return wrapNodesWithCosts(segments.toArray(new SegmentWithCost[0]));
     }
 
-    private ResponseWithTimes wrapNodesWithTimes(SegmentWithTime[] segments) {
+    private ResponseWithCosts wrapNodesWithCosts(SegmentWithCost[] segments) {
         Arrays.sort(segments);
-        ResponseWithTimes response = new ResponseWithTimes();
+        ResponseWithCosts response = new ResponseWithCosts();
         response.segments = segments;
         return response;
     }

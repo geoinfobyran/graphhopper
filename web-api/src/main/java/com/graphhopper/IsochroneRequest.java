@@ -8,7 +8,8 @@ import com.graphhopper.util.shapes.GHPoint;
 public class IsochroneRequest {
     private List<GHPoint> points = new ArrayList<GHPoint>();
     private String profileName = "";
-    private long timeLimitInSeconds = 0;
+    private long timeLimitInSeconds = -1;
+    private long distanceLimitInMeters = -1;
 
     public IsochroneRequest setPoints(List<GHPoint> points) {
         this.points = points;
@@ -39,5 +40,14 @@ public class IsochroneRequest {
 
     public long getTimeLimitInSeconds() {
         return timeLimitInSeconds;
+    }
+
+    public IsochroneRequest setDistanceLimitInMeters(long distanceLimitInMeters) {
+        this.distanceLimitInMeters = distanceLimitInMeters;
+        return this;
+    }
+
+    public long getDistanceLimitInMeters() {
+        return distanceLimitInMeters;
     }
 }

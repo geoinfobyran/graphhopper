@@ -15,7 +15,12 @@ class IsochroneRequestDeserializer extends JsonDeserializer<IsochroneRequest> {
         IsochroneRequest request = new IsochroneRequest();
         JsonNode treeNode = jsonParser.readValueAsTree();
         request.setProfileName(treeNode.get("profileName").asText());
-        request.setTimeLimitInSeconds(treeNode.get("timeLimitInSeconds").asLong());
+        if (treeNode.has("timeLimitInSeconds")) {
+            request.setTimeLimitInSeconds(treeNode.get("timeLimitInSeconds").asLong());
+        }
+        if (treeNode.has("distanceLimitInMeters")) {
+            request.setDistanceLimitInMeters(treeNode.get("distanceLimitInMeters").asLong());
+        }
         for (JsonNode node : treeNode.get("points")) {
             GHPoint point = new GHPoint(node.get("lat").asDouble(), node.get("lng").asDouble());
             request.addPoint(point);

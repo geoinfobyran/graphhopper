@@ -109,7 +109,7 @@ public class PtIsochroneResource {
     }
 
     public static class ResponseWithTimes extends BaseResponse {
-        public SegmentWithTime[] segments;
+        public SegmentWithCost[] segments;
     }
 
     @GET
@@ -141,7 +141,7 @@ public class PtIsochroneResource {
         MultiCriteriaLabelSetting router = new MultiCriteriaLabelSetting(graphExplorer, ptEncodedValues, reverseFlow,
                 false, false, 0, Collections.emptyList());
 
-        Map<Coordinate, SegmentWithTime> z1 = new HashMap<>();
+        Map<Coordinate, SegmentWithCost> z1 = new HashMap<>();
         NodeAccess nodeAccess = queryGraph.getNodeAccess();
 
         Instant start = Instant.now();
@@ -153,16 +153,16 @@ public class PtIsochroneResource {
                 if (transition.edgeType == EdgeType.HIGHWAY) {
                     Coordinate nodeCoordinate = new Coordinate(nodeAccess.getLon(nodeLabel.adjNode),
                             nodeAccess.getLat(nodeLabel.adjNode));
-                    CoordinateWithTime to = new CoordinateWithTime(
+                    CoordinateWithCost to = new CoordinateWithCost(
                             nodeCoordinate,
                             (double) (nodeLabel.currentTime - initialTime.toEpochMilli()) * (reverseFlow ? -1 : 1)
                                     / 1000.0);
-                    CoordinateWithTime from = new CoordinateWithTime(
+                    CoordinateWithCost from = new CoordinateWithCost(
                             new Coordinate(nodeAccess.getLon(nodeLabel.parent.adjNode),
                                     nodeAccess.getLat(nodeLabel.parent.adjNode)),
                             (double) (nodeLabel.parent.currentTime - initialTime.toEpochMilli()) * (reverseFlow ? -1 : 1)
                                     / 1000.0);
-                    z1.merge(nodeCoordinate, new SegmentWithTime(from, to), (a, b) -> a.compareTo(b) < 0 ? a : b);
+                    z1.merge(nodeCoordinate, new SegmentWithCost(from, to), (a, b) -> a.compareTo(b) < 0 ? a : b);
                 }
             }
         };
@@ -172,7 +172,7 @@ public class PtIsochroneResource {
         Instant end = Instant.now();
         Duration timeElapsed = Duration.between(start, end);
         System.out.println("Graph search: " + timeElapsed.toMillis() + " milliseconds");
-        return wrapNodesWithTimes(z1.values().toArray(new SegmentWithTime[0]));
+        return wrapNodesWithTimes(z1.values().toArray(new SegmentWithCost[0]));
     }
 
     private Snap findByPointOrStation(GHLocation location, Weighting weighting) {
@@ -211,7 +211,7 @@ public class PtIsochroneResource {
         }
     }
 
-    private ResponseWithTimes wrapNodesWithTimes(SegmentWithTime[] segments) {
+    private ResponseWithTimes wrapNodesWithTimes(SegmentWithCost[] segments) {
         Arrays.sort(segments);
         ResponseWithTimes response = new ResponseWithTimes();
         response.segments = segments;
