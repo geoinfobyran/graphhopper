@@ -1,6 +1,6 @@
 graphhopper:
   datareader.file: sweden/source/sweden-latest.osm.pbf
-  gtfs.file: gtfs-sweden.zip
+  gtfs.file: sweden/source/sweden.gtfs.zip
   graph.location: sweden/graphhopper-dev
 
   profiles:
