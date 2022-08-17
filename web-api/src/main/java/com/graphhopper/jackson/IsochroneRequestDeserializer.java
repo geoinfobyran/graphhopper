@@ -22,7 +22,7 @@ class IsochroneRequestDeserializer extends JsonDeserializer<IsochroneRequest> {
             request.setDistanceLimitInMeters(treeNode.get("distanceLimitInMeters").asLong());
         }
         for (JsonNode node : treeNode.get("points")) {
-            GHPoint point = new GHPoint(node.get("lat").asDouble(), node.get("lng").asDouble());
+            GHPoint point = new GHPoint(node.get("latitude").asDouble(), node.get("longitude").asDouble());
             request.addPoint(point);
         }
         return request;
