@@ -124,6 +124,10 @@ public class Snap {
         return snappedPoint;
     }
 
+    public void setSnappedPoint(GHPoint3D point) {
+        snappedPoint = point;
+    }
+
     /**
      * Calculates the closest point on the edge from the query point.
      */
