@@ -6,12 +6,14 @@ import com.fasterxml.jackson.databind.JsonDeserializer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.graphhopper.util.shapes.GHPoint;
 import com.graphhopper.IsochroneRequest;
+import com.graphhopper.Region;
 
 import java.io.IOException;
 
 class IsochroneRequestDeserializer extends JsonDeserializer<IsochroneRequest> {
     @Override
-    public IsochroneRequest deserialize(JsonParser jsonParser, DeserializationContext deserializationContext) throws IOException {
+    public IsochroneRequest deserialize(JsonParser jsonParser, DeserializationContext deserializationContext)
+            throws IOException {
         IsochroneRequest request = new IsochroneRequest();
         JsonNode treeNode = jsonParser.readValueAsTree();
         request.setProfileName(treeNode.get("profileName").asText());
@@ -21,9 +23,14 @@ class IsochroneRequestDeserializer extends JsonDeserializer<IsochroneRequest> {
         if (treeNode.has("distanceLimitInMeters")) {
             request.setDistanceLimitInMeters(treeNode.get("distanceLimitInMeters").asLong());
         }
-        for (JsonNode node : treeNode.get("points")) {
-            GHPoint point = new GHPoint(node.get("latitude").asDouble(), node.get("longitude").asDouble());
-            request.addPoint(point);
+        for (JsonNode polygonNode : treeNode.get("polygons")) {
+            JsonNode regionNode = polygonNode.get("points");
+            Region region = new Region();
+            for (JsonNode pointNode : regionNode) {
+                region.addPoint(
+                        new GHPoint(pointNode.get("latitude").asDouble(), pointNode.get("longitude").asDouble()));
+            }
+            request.addRegion(region);
         }
         return request;
     }

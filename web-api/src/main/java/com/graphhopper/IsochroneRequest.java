@@ -3,25 +3,23 @@ package com.graphhopper;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.graphhopper.util.shapes.GHPoint;
-
 public class IsochroneRequest {
-    private List<GHPoint> points = new ArrayList<GHPoint>();
+    private List<Region> regions = new ArrayList<Region>();
     private String profileName = "";
     private long timeLimitInSeconds = -1;
     private long distanceLimitInMeters = -1;
 
-    public IsochroneRequest setPoints(List<GHPoint> points) {
-        this.points = points;
+    public IsochroneRequest setRegions(List<Region> regions) {
+        this.regions = regions;
         return this;
     }
 
-    public List<GHPoint> getPoints() {
-        return points;
+    public List<Region> getRegions() {
+        return regions;
     }
 
-    public void addPoint(GHPoint point) {
-        this.points.add(point);
+    public void addRegion(Region region) {
+        this.regions.add(region);
     }
 
     public IsochroneRequest setProfileName(String profileName) {

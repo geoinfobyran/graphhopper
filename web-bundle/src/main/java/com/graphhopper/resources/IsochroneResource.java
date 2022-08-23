@@ -2,6 +2,7 @@ package com.graphhopper.resources;
 
 import com.graphhopper.GraphHopper;
 import com.graphhopper.IsochroneRequest;
+import com.graphhopper.Region;
 import com.graphhopper.config.Profile;
 import com.graphhopper.http.ProfileResolver;
 import com.graphhopper.storage.NodeAccess;
@@ -17,7 +18,11 @@ import com.graphhopper.storage.BaseGraph;
 import com.graphhopper.storage.index.LocationIndex;
 import com.graphhopper.storage.index.Snap;
 import com.graphhopper.util.*;
+import com.graphhopper.util.shapes.BBox;
 import com.graphhopper.util.shapes.GHPoint;
+import com.graphhopper.util.shapes.GHPoint3D;
+import com.graphhopper.util.shapes.Polygon;
+
 import org.locationtech.jts.geom.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -80,12 +85,51 @@ public class IsochroneResource {
                 .getBooleanEncodedValue(Subnetwork.key(request.getProfileName()));
         assert (!hintsMap.has(Parameters.Routing.BLOCK_AREA));
         List<Snap> snaps = new ArrayList<Snap>();
-        for (GHPoint point : request.getPoints()) {
-            Snap snap = locationIndex.findClosest(point.lat, point.lon,
-                    new DefaultSnapFilter(weighting, inSubnetworkEnc));
-            if (!snap.isValid())
-                throw new IllegalArgumentException("Point not found:" + point);
-            snaps.add(snap);
+        final NodeAccess nodeAccess = graphHopper.getBaseGraph().getNodeAccess();
+        for (Region region : request.getRegions()) {
+            List<GHPoint> points = region.getPoints();
+            assert (!points.isEmpty());
+            double[] lats = new double[points.size()];
+            double[] lons = new double[points.size()];
+            for (int i = 0; i < points.size(); i += 1) {
+                GHPoint point = points.get(i);
+                lats[i] = point.lat;
+                lons[i] = point.lon;
+
+                GHPoint nextPoint = points.get(i == points.size() - 1 ? 0 : (i+1));
+                int numSubsegments = (int)(Math.ceil((Math.abs(point.lat-nextPoint.lat)+Math.abs(point.lon-nextPoint.lon)) / 1e-4))+1;
+                for (int j = 0; j < numSubsegments; j++) {
+                    double lat = ((point.lat * j) + nextPoint.lat * (numSubsegments - j)) / numSubsegments;
+                    double lon = ((point.lon * j) + nextPoint.lon * (numSubsegments - j)) / numSubsegments;
+                    Snap snap = locationIndex.findClosest(lat, lon,
+                            new DefaultSnapFilter(weighting, inSubnetworkEnc));
+                    if (!snap.isValid())
+                        throw new IllegalArgumentException("Point not found: (" + lat + ", " + lon + ")");
+                    snaps.add(snap);
+                }
+            }
+            if (points.size() > 1) {
+                Polygon polygon = new Polygon(lats, lons);
+                BBox bbox = polygon.getBounds();
+                locationIndex.query(bbox, edgeId -> {
+                    EdgeIteratorState edge = graphHopper.getBaseGraph().getEdgeIteratorStateForKey(edgeId * 2);
+                    for (int i = 0; i < 2; i++) {
+                        int nodeId = i == 0 ? edge.getBaseNode() : edge.getAdjNode();
+                        double lat = nodeAccess.getLat(nodeId);
+                        double lon = nodeAccess.getLon(nodeId);
+                        if (polygon.contains(lat, lon)) {
+                            final Snap snap = new Snap(lat, lon);
+                            snap.setQueryDistance(0);
+                            snap.setClosestNode(nodeId);
+                            snap.setClosestEdge(edge.detach(false));
+                            snap.setSnappedPosition(Snap.Position.TOWER);
+                            snap.setQueryDistance(0);
+                            snap.setSnappedPoint(new GHPoint3D(lat, lon, 0));
+                            snaps.add(snap);
+                        }
+                    }
+                });
+            }
         }
         QueryGraph queryGraph = QueryGraph.create(graph, snaps);
         TraversalMode traversalMode = profile.isTurnCosts() ? EDGE_BASED : NODE_BASED;
@@ -125,7 +169,6 @@ public class IsochroneResource {
             site.z = exploreValue;
             sites.add(site);
 
-            // TODO: Visit all edges, not just tree edges.
             if (label.parent != null) {
                 double parentExploreValue = fz.applyAsDouble(label.parent);
                 EdgeIteratorState edge = queryGraph.getEdgeIteratorState(label.edge, label.node);
@@ -161,22 +204,6 @@ public class IsochroneResource {
         ResponseWithCosts response = new ResponseWithCosts();
         response.segments = segments;
         return response;
-    }
-
-    private Polygon heuristicallyFindMainConnectedComponent(MultiPolygon multiPolygon, Point point) {
-        int maxPoints = 0;
-        Polygon maxPolygon = null;
-        for (int j = 0; j < multiPolygon.getNumGeometries(); j++) {
-            Polygon polygon = (Polygon) multiPolygon.getGeometryN(j);
-            if (polygon.contains(point)) {
-                return polygon;
-            }
-            if (polygon.getNumPoints() > maxPoints) {
-                maxPoints = polygon.getNumPoints();
-                maxPolygon = polygon;
-            }
-        }
-        return maxPolygon;
     }
 
     /**
