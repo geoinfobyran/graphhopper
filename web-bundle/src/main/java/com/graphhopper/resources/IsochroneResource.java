@@ -118,7 +118,6 @@ public class IsochroneResource {
                         double lat = nodeAccess.getLat(nodeId);
                         double lon = nodeAccess.getLon(nodeId);
                         if (polygon.contains(lat, lon)) {
-                            logger.info("Contained in polygon: (" + lat + ", " + lon + ")");
                             final Snap snap = new Snap(lat, lon);
                             snap.setQueryDistance(0);
                             snap.setClosestNode(nodeId);
@@ -176,10 +175,6 @@ public class IsochroneResource {
                 ArrayList<CoordinateWithCost> coordinates = new ArrayList<>();
                 double c1 = parentExploreValue * normalization_factor;
                 double c2 = exploreValue * normalization_factor;
-                if (na.getLat(label.parent.node) > 63.1788 && na.getLat(label.parent.node) < 63.1812 && na.getLon(label.parent.node) > 14.65493 && na.getLon(label.parent.node) < 14.663) {
-                    logger.info("Edge from: (" + na.getLat(label.parent.node) + ", " + na.getLon(label.parent.node) + ") at time " + c1);
-                    logger.info("Edge to: (" + lat + ", " + lon + ") at time " + c2);
-                }
                 coordinates.add(new CoordinateWithCost(
                         na.getLat(label.parent.node),
                         na.getLon(label.parent.node),
