@@ -128,10 +128,10 @@ public class ShortestPathTree extends AbstractRoutingAlgorithm {
     public void search(int from, final Consumer<IsoLabel> consumer) {
         List<Integer> fromList = new ArrayList<Integer>();
         fromList.add(from);
-        search(fromList, consumer);
+        search(false, fromList, consumer);
     }
 
-    public void search(List<Integer> from, final Consumer<IsoLabel> consumer) {
+    public void search(boolean useDistanceAsWeight, List<Integer> from, final Consumer<IsoLabel> consumer) {
         checkAlreadyRun();
         for (int node : from) {
             IsoLabel currentLabel = new IsoLabel(node, -1, 0, 0, 0, null);
@@ -159,6 +159,9 @@ public class ShortestPathTree extends AbstractRoutingAlgorithm {
                     continue;
 
                 double nextDistance = iter.getDistance() + currentLabel.distance;
+                if (useDistanceAsWeight) {
+                    nextWeight = nextDistance;
+                }
                 long nextTime = GHUtility.calcMillisWithTurnMillis(weighting, iter, reverseFlow, currentLabel.edge) + currentLabel.time;
                 int nextTraversalId = traversalMode.createTraversalId(iter, reverseFlow);
                 IsoLabel label = fromMap.get(nextTraversalId);
