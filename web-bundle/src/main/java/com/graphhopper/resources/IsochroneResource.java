@@ -161,10 +161,7 @@ public class IsochroneResource {
         }
         Collection<Coordinate> sites = new ArrayList<>();
         Collection<SegmentWithCost> segments = new ArrayList<>();
-        // When searching from several nodes we need to use the distance as weight in the Dijkstra,
-        // so that we are guaranteed to get a lower bound on the actual distance.
-        boolean useDistanceAsWeight = request.getRegions().size() > 1;
-        shortestPathTree.search(useDistanceAsWeight, fromNodes, label -> {
+        shortestPathTree.search(request.getUseDistanceAsWeight(), fromNodes, label -> {
             double exploreValue = fz.applyAsDouble(label);
             double lat = na.getLat(label.node);
             double lon = na.getLon(label.node);
