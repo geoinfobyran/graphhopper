@@ -161,7 +161,7 @@ public class IsochroneResource {
         }
         Collection<Coordinate> sites = new ArrayList<>();
         Collection<SegmentWithCost> segments = new ArrayList<>();
-        shortestPathTree.search(fromNodes, label -> {
+        shortestPathTree.search(request.getUseDistanceAsWeight(), fromNodes, label -> {
             double exploreValue = fz.applyAsDouble(label);
             double lat = na.getLat(label.node);
             double lon = na.getLon(label.node);

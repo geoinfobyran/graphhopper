@@ -8,6 +8,7 @@ public class IsochroneRequest {
     private String profileName = "";
     private long timeLimitInSeconds = -1;
     private long distanceLimitInMeters = -1;
+    private boolean useDistanceAsWeight = false;
 
     public IsochroneRequest setRegions(List<Region> regions) {
         this.regions = regions;
@@ -47,5 +48,14 @@ public class IsochroneRequest {
 
     public long getDistanceLimitInMeters() {
         return distanceLimitInMeters;
+    }
+
+    public IsochroneRequest setUseDistanceAsWeight(boolean useDistanceAsWeight) {
+        this.useDistanceAsWeight = useDistanceAsWeight;
+        return this;
+    }
+
+    public boolean getUseDistanceAsWeight() {
+        return useDistanceAsWeight;
     }
 }
