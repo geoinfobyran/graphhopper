@@ -83,6 +83,11 @@ public class IsochroneResource {
         }
         double[] lats = new double[points.size()];
         double[] lons = new double[points.size()];
+        for (int i = 0; i < points.size(); i += 1) {
+            GHPoint point = points.get(i);
+            lats[i] = point.lat;
+            lons[i] = point.lon;
+        }
         Polygon polygon = new Polygon(lats, lons);
         BBox bbox = polygon.getBounds();
         locationIndex.query(bbox, edgeId -> {
