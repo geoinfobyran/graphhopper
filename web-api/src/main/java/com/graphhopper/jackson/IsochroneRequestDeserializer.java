@@ -9,6 +9,8 @@ import com.graphhopper.IsochroneRequest;
 import com.graphhopper.Region;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 class IsochroneRequestDeserializer extends JsonDeserializer<IsochroneRequest> {
     @Override
@@ -29,6 +31,15 @@ class IsochroneRequestDeserializer extends JsonDeserializer<IsochroneRequest> {
             for (JsonNode pointNode : regionNode) {
                 region.addPoint(
                         new GHPoint(pointNode.get("latitude").asDouble(), pointNode.get("longitude").asDouble()));
+            }
+            if (polygonNode.has("holes")) {
+                for (JsonNode holeNode : polygonNode.get("holes")) {
+                    List<GHPoint> hole = new ArrayList<GHPoint>();
+                    for (JsonNode pointNode : holeNode.get("points")) {
+                        hole.add(new GHPoint(pointNode.get("latitude").asDouble(), pointNode.get("longitude").asDouble()));
+                    }
+                    region.addHole(hole);
+                }
             }
             request.addRegion(region);
         }

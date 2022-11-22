@@ -31,11 +31,12 @@ import javax.inject.Inject;
 import javax.validation.constraints.NotNull;
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
-import java.util.function.ToDoubleFunction;
 
+import java.util.function.ToDoubleFunction;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 
 import static com.graphhopper.routing.util.TraversalMode.EDGE_BASED;
@@ -63,6 +64,44 @@ public class IsochroneResource {
 
     public static class ResponseWithCosts {
         public SegmentWithCost[] segments;
+    }
+
+    private class PointWithEdge {
+        int nodeId;
+        int edgeId;
+
+        PointWithEdge(int nodeId, int edgeId) {
+            this.nodeId = nodeId;
+            this.edgeId = edgeId;
+        }
+    }
+
+    private List<PointWithEdge> getPointsInPolygon(List<GHPoint> points, LocationIndex locationIndex, NodeAccess nodeAccess) {
+        List<PointWithEdge> pointsInPolygon = new ArrayList<>();
+        if (points.size() <= 1) {
+            return pointsInPolygon;
+        }
+        double[] lats = new double[points.size()];
+        double[] lons = new double[points.size()];
+        for (int i = 0; i < points.size(); i += 1) {
+            GHPoint point = points.get(i);
+            lats[i] = point.lat;
+            lons[i] = point.lon;
+        }
+        Polygon polygon = new Polygon(lats, lons);
+        BBox bbox = polygon.getBounds();
+        locationIndex.query(bbox, edgeId -> {
+            EdgeIteratorState edge = graphHopper.getBaseGraph().getEdgeIteratorStateForKey(edgeId * 2);
+            for (int i = 0; i < 2; i++) {
+                int nodeId = i == 0 ? edge.getBaseNode() : edge.getAdjNode();
+                double lat = nodeAccess.getLat(nodeId);
+                double lon = nodeAccess.getLon(nodeId);
+                if (polygon.contains(lat, lon)) {
+                    pointsInPolygon.add(new PointWithEdge(nodeId, edgeId));
+                }
+            }
+        });
+        return pointsInPolygon;
     }
 
     @POST
@@ -108,27 +147,27 @@ public class IsochroneResource {
                     snaps.add(snap);
                 }
             }
-            if (points.size() > 1) {
-                Polygon polygon = new Polygon(lats, lons);
-                BBox bbox = polygon.getBounds();
-                locationIndex.query(bbox, edgeId -> {
-                    EdgeIteratorState edge = graphHopper.getBaseGraph().getEdgeIteratorStateForKey(edgeId * 2);
-                    for (int i = 0; i < 2; i++) {
-                        int nodeId = i == 0 ? edge.getBaseNode() : edge.getAdjNode();
-                        double lat = nodeAccess.getLat(nodeId);
-                        double lon = nodeAccess.getLon(nodeId);
-                        if (polygon.contains(lat, lon)) {
-                            final Snap snap = new Snap(lat, lon);
-                            snap.setQueryDistance(0);
-                            snap.setClosestNode(nodeId);
-                            snap.setClosestEdge(edge.detach(false));
-                            snap.setSnappedPosition(Snap.Position.TOWER);
-                            snap.setQueryDistance(0);
-                            snap.setSnappedPoint(new GHPoint3D(lat, lon, 0));
-                            snaps.add(snap);
-                        }
-                    }
-                });
+            HashSet<Integer> nodeIdsInsideHoles = new HashSet<Integer>();
+            for (List<GHPoint> hole : region.getHoles()) {
+                for (PointWithEdge point : getPointsInPolygon(hole, locationIndex, nodeAccess)) {
+                    nodeIdsInsideHoles.add(point.nodeId);
+                }
+            }
+            for (PointWithEdge point : getPointsInPolygon(points, locationIndex, nodeAccess)) {
+                int nodeId = point.nodeId;
+                if (!nodeIdsInsideHoles.contains(nodeId)) {
+                    EdgeIteratorState edge = graphHopper.getBaseGraph().getEdgeIteratorStateForKey(point.edgeId * 2);
+                    double lat = nodeAccess.getLat(nodeId);
+                    double lon = nodeAccess.getLon(nodeId);
+                    final Snap snap = new Snap(lat, lon);
+                    snap.setQueryDistance(0);
+                    snap.setClosestNode(nodeId);
+                    snap.setClosestEdge(edge.detach(false));
+                    snap.setSnappedPosition(Snap.Position.TOWER);
+                    snap.setQueryDistance(0);
+                    snap.setSnappedPoint(new GHPoint3D(lat, lon, 0));
+                    snaps.add(snap);
+                }
             }
         }
         QueryGraph queryGraph = QueryGraph.create(graph, snaps);
