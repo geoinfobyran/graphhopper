@@ -23,11 +23,6 @@ public class Region {
         this.points.add(point);
     }
 
-    public Region setHoles(List<List<GHPoint>> holes) {
-        this.holes = holes;
-        return this;
-    }
-
     public List<List<GHPoint>> getHoles() {
         return holes;
     }
