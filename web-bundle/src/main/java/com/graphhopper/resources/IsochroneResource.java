@@ -111,8 +111,8 @@ public class IsochroneResource {
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public ResponseWithCosts doPost(@NotNull IsochroneRequest request) {
-        DistanceCalcEarth distanceCalculator = new DistanceCalcEarth();
         StopWatch sw = new StopWatch().start();
+        DistanceCalcEarth distanceCalculator = new DistanceCalcEarth();
         PMap hintsMap = new PMap();
         hintsMap.putObject(Parameters.CH.DISABLE, true);
         hintsMap.putObject(Parameters.Landmark.DISABLE, true);
