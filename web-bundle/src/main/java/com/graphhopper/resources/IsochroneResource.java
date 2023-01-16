@@ -8,6 +8,7 @@ import com.graphhopper.http.ProfileResolver;
 import com.graphhopper.storage.NodeAccess;
 import com.graphhopper.isochrone.algorithm.ShortestPathTree;
 import com.graphhopper.isochrone.algorithm.Triangulator;
+import com.graphhopper.isochrone.algorithm.ShortestPathTree.IsoLabel;
 import com.graphhopper.routing.ev.BooleanEncodedValue;
 import com.graphhopper.routing.ev.Subnetwork;
 import com.graphhopper.routing.querygraph.QueryGraph;
@@ -194,13 +195,16 @@ public class IsochroneResource {
         zs.add(limit);
 
         final NodeAccess na = queryGraph.getNodeAccess();
-        List<Integer> fromNodes = new ArrayList<Integer>();
+        List<IsoLabel> fromLabels = new ArrayList<IsoLabel>();
         for (Snap snap : snaps) {
-            fromNodes.add(snap.getClosestNode());
+            int node = snap.getClosestNode();
+            // TODO: Set the weight and the time to reasonable values, if needed.
+            IsoLabel currentLabel = new IsoLabel(node, -1, 0, 0, snap.getQueryDistance(), null);
+            fromLabels.add(currentLabel);
         }
         Collection<Coordinate> sites = new ArrayList<>();
         Collection<SegmentWithCost> segments = new ArrayList<>();
-        shortestPathTree.search(request.getUseDistanceAsWeight(), fromNodes, label -> {
+        shortestPathTree.searchFromLabels(request.getUseDistanceAsWeight(), fromLabels, label -> {
             double exploreValue = fz.applyAsDouble(label);
             double lat = na.getLat(label.node);
             double lon = na.getLon(label.node);
