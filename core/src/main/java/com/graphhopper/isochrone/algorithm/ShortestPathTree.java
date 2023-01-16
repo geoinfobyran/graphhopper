@@ -56,7 +56,7 @@ public class ShortestPathTree extends AbstractRoutingAlgorithm {
 
     public static class IsoLabel {
 
-        IsoLabel(int node, int edge, double weight, long time, double distance, IsoLabel parent) {
+        public IsoLabel(int node, int edge, double weight, long time, double distance, IsoLabel parent) {
             this.node = node;
             this.edge = edge;
             this.weight = weight;
@@ -132,12 +132,20 @@ public class ShortestPathTree extends AbstractRoutingAlgorithm {
     }
 
     public void search(boolean useDistanceAsWeight, List<Integer> from, final Consumer<IsoLabel> consumer) {
-        checkAlreadyRun();
+        List<IsoLabel> fromLabels = new ArrayList<>();
         for (int node : from) {
             IsoLabel currentLabel = new IsoLabel(node, -1, 0, 0, 0, null);
+            fromLabels.add(currentLabel);
+        }
+        searchFromLabels(useDistanceAsWeight, fromLabels, consumer);
+    }
+
+    public void searchFromLabels(boolean useDistanceAsWeight, List<IsoLabel> from, final Consumer<IsoLabel> consumer) {
+        checkAlreadyRun();
+        for (IsoLabel currentLabel : from) {
             queueByWeighting.add(currentLabel);
             if (traversalMode == TraversalMode.NODE_BASED) {
-                fromMap.put(node, currentLabel);
+                fromMap.put(currentLabel.node, currentLabel);
                 consumer.accept(currentLabel);
             }
         }

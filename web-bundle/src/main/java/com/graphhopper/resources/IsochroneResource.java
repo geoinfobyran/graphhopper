@@ -7,6 +7,7 @@ import com.graphhopper.config.Profile;
 import com.graphhopper.http.ProfileResolver;
 import com.graphhopper.storage.NodeAccess;
 import com.graphhopper.isochrone.algorithm.ShortestPathTree;
+import com.graphhopper.isochrone.algorithm.ShortestPathTree.IsoLabel;
 import com.graphhopper.isochrone.algorithm.Triangulator;
 import com.graphhopper.routing.ev.BooleanEncodedValue;
 import com.graphhopper.routing.ev.Subnetwork;
@@ -18,6 +19,7 @@ import com.graphhopper.storage.BaseGraph;
 import com.graphhopper.storage.index.LocationIndex;
 import com.graphhopper.storage.index.Snap;
 import com.graphhopper.util.*;
+import com.graphhopper.util.DistanceCalcEarth;
 import com.graphhopper.util.shapes.BBox;
 import com.graphhopper.util.shapes.GHPoint;
 import com.graphhopper.util.shapes.GHPoint3D;
@@ -76,7 +78,8 @@ public class IsochroneResource {
         }
     }
 
-    private List<PointWithEdge> getPointsInPolygon(List<GHPoint> points, LocationIndex locationIndex, NodeAccess nodeAccess) {
+    private List<PointWithEdge> getPointsInPolygon(List<GHPoint> points, LocationIndex locationIndex,
+            NodeAccess nodeAccess) {
         List<PointWithEdge> pointsInPolygon = new ArrayList<>();
         if (points.size() <= 1) {
             return pointsInPolygon;
@@ -109,6 +112,7 @@ public class IsochroneResource {
     @Produces(MediaType.APPLICATION_JSON)
     public ResponseWithCosts doPost(@NotNull IsochroneRequest request) {
         StopWatch sw = new StopWatch().start();
+        DistanceCalcEarth distanceCalculator = new DistanceCalcEarth();
         PMap hintsMap = new PMap();
         hintsMap.putObject(Parameters.CH.DISABLE, true);
         hintsMap.putObject(Parameters.Landmark.DISABLE, true);
@@ -135,8 +139,9 @@ public class IsochroneResource {
                 lats[i] = point.lat;
                 lons[i] = point.lon;
 
-                GHPoint nextPoint = points.get(i == points.size() - 1 ? 0 : (i+1));
-                int numSubsegments = (int)(Math.ceil((Math.abs(point.lat-nextPoint.lat)+Math.abs(point.lon-nextPoint.lon)) / 1e-4))+1;
+                GHPoint nextPoint = points.get(i == points.size() - 1 ? 0 : (i + 1));
+                int numSubsegments = (int) (Math
+                        .ceil((Math.abs(point.lat - nextPoint.lat) + Math.abs(point.lon - nextPoint.lon)) / 1e-4)) + 1;
                 for (int j = 0; j < numSubsegments; j++) {
                     double lat = ((point.lat * j) + nextPoint.lat * (numSubsegments - j)) / numSubsegments;
                     double lon = ((point.lon * j) + nextPoint.lon * (numSubsegments - j)) / numSubsegments;
@@ -194,13 +199,16 @@ public class IsochroneResource {
         zs.add(limit);
 
         final NodeAccess na = queryGraph.getNodeAccess();
-        List<Integer> fromNodes = new ArrayList<Integer>();
+        List<IsoLabel> fromLabels = new ArrayList<IsoLabel>();
         for (Snap snap : snaps) {
-            fromNodes.add(snap.getClosestNode());
+            int node = snap.getClosestNode();
+            // TODO: Set the weight and the time to reasonable values, if needed.
+            IsoLabel currentLabel = new IsoLabel(node, -1, 0, 0, snap.getQueryDistance(), null);
+            fromLabels.add(currentLabel);
         }
         Collection<Coordinate> sites = new ArrayList<>();
         Collection<SegmentWithCost> segments = new ArrayList<>();
-        shortestPathTree.search(request.getUseDistanceAsWeight(), fromNodes, label -> {
+        shortestPathTree.searchFromLabels(request.getUseDistanceAsWeight(), fromLabels, label -> {
             double exploreValue = fz.applyAsDouble(label);
             double lat = na.getLat(label.node);
             double lon = na.getLon(label.node);
@@ -214,16 +222,34 @@ public class IsochroneResource {
                 ArrayList<CoordinateWithCost> coordinates = new ArrayList<>();
                 double c1 = parentExploreValue * normalization_factor;
                 double c2 = exploreValue * normalization_factor;
+                
+                PointList points = edge.fetchWayGeometry(FetchMode.PILLAR_ONLY);
+                double prevLat = na.getLat(label.parent.node);
+                double prevLon = na.getLon(label.parent.node);
+                double[] segmentLengths = new double[points.size() + 1];
+                double totalLength = 0.0;
+                for (int i = 0; i < points.size(); i++) {
+                    segmentLengths[i] = distanceCalculator.calcDist(prevLat, prevLon,
+                            points.getLat(i), points.getLon(i));
+                    totalLength += segmentLengths[i];
+                    prevLat = points.getLat(i);
+                    prevLon = points.getLon(i);
+                }
+                segmentLengths[segmentLengths.length - 1] = distanceCalculator.calcDist(prevLat, prevLon, lat, lon);
+                totalLength += segmentLengths[segmentLengths.length - 1];
+
+                double traversedLength = 0;
                 coordinates.add(new CoordinateWithCost(
                         na.getLat(label.parent.node),
                         na.getLon(label.parent.node),
                         c1));
-                PointList points = edge.fetchWayGeometry(FetchMode.PILLAR_ONLY);
                 for (int i = 0; i < points.size(); i++) {
+                    traversedLength += segmentLengths[i];
+                    // Interpolate costs of pillar nodes using the Euclidean distances along the path.
                     coordinates.add(new CoordinateWithCost(
                             points.getLat(i),
                             points.getLon(i),
-                            (c1 * (points.size() - i)) / (points.size() + 1) + (c2 * (i + 1)) / (points.size() + 1)));
+                            totalLength > 0 ? c1 + (c2 - c1) * traversedLength / totalLength : (i == 0 ? c1 : c2)));
                 }
                 coordinates.add(new CoordinateWithCost(
                         lat,
