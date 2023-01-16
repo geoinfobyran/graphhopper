@@ -7,19 +7,19 @@ import com.graphhopper.config.Profile;
 import com.graphhopper.http.ProfileResolver;
 import com.graphhopper.storage.NodeAccess;
 import com.graphhopper.isochrone.algorithm.ShortestPathTree;
-import com.graphhopper.isochrone.algorithm.Triangulator;
 import com.graphhopper.isochrone.algorithm.ShortestPathTree.IsoLabel;
+import com.graphhopper.isochrone.algorithm.Triangulator;
 import com.graphhopper.routing.ev.BooleanEncodedValue;
 import com.graphhopper.routing.ev.Subnetwork;
 import com.graphhopper.routing.querygraph.QueryGraph;
 import com.graphhopper.routing.util.DefaultSnapFilter;
 import com.graphhopper.routing.util.TraversalMode;
-import com.graphhopper.util.DistanceCalcEarth;
 import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.BaseGraph;
 import com.graphhopper.storage.index.LocationIndex;
 import com.graphhopper.storage.index.Snap;
 import com.graphhopper.util.*;
+import com.graphhopper.util.DistanceCalcEarth;
 import com.graphhopper.util.shapes.BBox;
 import com.graphhopper.util.shapes.GHPoint;
 import com.graphhopper.util.shapes.GHPoint3D;
@@ -222,14 +222,10 @@ public class IsochroneResource {
                 ArrayList<CoordinateWithCost> coordinates = new ArrayList<>();
                 double c1 = parentExploreValue * normalization_factor;
                 double c2 = exploreValue * normalization_factor;
-                coordinates.add(new CoordinateWithCost(
-                        na.getLat(label.parent.node),
-                        na.getLon(label.parent.node),
-                        c1));
+                
                 PointList points = edge.fetchWayGeometry(FetchMode.PILLAR_ONLY);
                 double prevLat = na.getLat(label.parent.node);
                 double prevLon = na.getLon(label.parent.node);
-
                 double[] segmentLengths = new double[points.size() + 1];
                 double totalLength = 0.0;
                 for (int i = 0; i < points.size(); i++) {
@@ -239,12 +235,17 @@ public class IsochroneResource {
                     prevLat = points.getLat(i);
                     prevLon = points.getLon(i);
                 }
-                segmentLengths[segmentLengths.length-1] = distanceCalculator.calcDist(prevLat, prevLon, lat, lon);
-                totalLength += segmentLengths[segmentLengths.length-1];
+                segmentLengths[segmentLengths.length - 1] = distanceCalculator.calcDist(prevLat, prevLon, lat, lon);
+                totalLength += segmentLengths[segmentLengths.length - 1];
 
                 double traversedLength = 0;
+                coordinates.add(new CoordinateWithCost(
+                        na.getLat(label.parent.node),
+                        na.getLon(label.parent.node),
+                        c1));
                 for (int i = 0; i < points.size(); i++) {
                     traversedLength += segmentLengths[i];
+                    // Interpolate costs of pillar nodes using the Euclidean distances along the path.
                     coordinates.add(new CoordinateWithCost(
                             points.getLat(i),
                             points.getLon(i),
@@ -254,19 +255,6 @@ public class IsochroneResource {
                         lat,
                         lon,
                         c2));
-                for (int i = 0; i < coordinates.size(); i++) {
-                    if (Math.abs(coordinates.get(i).cost - 255.31859) < 1e-4) {
-                    // if (Math.abs(coordinates.get(i).lat - 59.30372169) < 1e-5 && Math.abs(coordinates.get(i).lng - 18.092936) < 1e-5) {
-                        logger.error("\u001b[1;31m");
-                        logger.error("\n\nTotal length = " + Double.toString(totalLength));
-                        logger.error("c1 = " + Double.toString(c1));
-                        logger.error("c2 = " + Double.toString(c2));
-                        for (int j = 0; j < coordinates.size(); j++) {
-                            logger.error("Coordinate " + coordinates.get(j).lat + ", " + coordinates.get(j).lng + ": " + coordinates.get(j).cost);
-                        }
-                        logger.error("\u001b[0m");
-                    }
-                }
                 for (int i = 0; i + 1 < coordinates.size(); i++) {
                     segments.add(new SegmentWithCost(coordinates.get(i), coordinates.get(i + 1)));
                 }
