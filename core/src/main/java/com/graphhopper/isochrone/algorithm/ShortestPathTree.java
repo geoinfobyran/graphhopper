@@ -34,6 +34,9 @@ import java.util.List;
 import java.util.PriorityQueue;
 import java.util.function.Consumer;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import static com.graphhopper.isochrone.algorithm.ShortestPathTree.ExploreType.*;
 import static java.util.Comparator.comparingDouble;
 
@@ -53,6 +56,8 @@ import static java.util.Comparator.comparingDouble;
 public class ShortestPathTree extends AbstractRoutingAlgorithm {
 
     enum ExploreType {TIME, DISTANCE, WEIGHT}
+
+    private static final Logger logger = LoggerFactory.getLogger(ShortestPathTree.class);
 
     public static class IsoLabel {
 
@@ -167,6 +172,20 @@ public class ShortestPathTree extends AbstractRoutingAlgorithm {
                     continue;
 
                 double nextDistance = iter.getDistance() + currentLabel.distance;
+                if (Math.abs(currentLabel.distance-119.219604) < 1e-5) { // && Math.abs(nextDistance-168.41527) < 1e-5) {
+                    logger.error("\n\n\nFound the bad edge");
+                    logger.error("distance = " + Double.toString(iter.getDistance()));
+                    IsoLabel node = currentLabel.parent;
+                    while (node != null) {
+                        double lat = this.graph.getNodeAccess().getLat(node.node);
+                        double lon = this.graph.getNodeAccess().getLon(node.node);
+                        logger.error("\n(" + Double.toString(lat) + ", " + Double.toString(lon) + ")");
+                        logger.error("distance = " + Double.toString(node.distance));
+                        logger.error("weight = " + Double.toString(node.weight));
+                        node = node.parent;
+                    }
+                    logger.error("\n\n\n");
+                }
                 if (useDistanceAsWeight) {
                     nextWeight = nextDistance;
                 }
