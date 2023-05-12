@@ -38,8 +38,10 @@ import java.util.function.ToDoubleFunction;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 
 import static com.graphhopper.routing.util.TraversalMode.EDGE_BASED;
 import static com.graphhopper.routing.util.TraversalMode.NODE_BASED;
@@ -199,11 +201,22 @@ public class IsochroneResource {
         zs.add(limit);
 
         final NodeAccess na = queryGraph.getNodeAccess();
-        List<IsoLabel> fromLabels = new ArrayList<IsoLabel>();
+        HashMap<Integer, Double> nodeDistances = new HashMap<Integer, Double>();
         for (Snap snap : snaps) {
             int node = snap.getClosestNode();
+            double distance = snap.getQueryDistance();
+            if (nodeDistances.containsKey(node)) {
+                nodeDistances.put(node, Math.min(nodeDistances.get(node), distance));
+            } else {
+                nodeDistances.put(node, distance);
+            }
+        }
+        List<IsoLabel> fromLabels = new ArrayList<IsoLabel>();
+        for (Map.Entry<Integer, Double> entry : nodeDistances.entrySet()) {
+            int node = entry.getKey();
+            double distance = entry.getValue();
             // TODO: Set the weight and the time to reasonable values, if needed.
-            IsoLabel currentLabel = new IsoLabel(node, -1, 0, 0, snap.getQueryDistance(), null);
+            IsoLabel currentLabel = new IsoLabel(node, -1, 0, 0, distance, null);
             fromLabels.add(currentLabel);
         }
         Collection<Coordinate> sites = new ArrayList<>();
@@ -222,7 +235,7 @@ public class IsochroneResource {
                 ArrayList<CoordinateWithCost> coordinates = new ArrayList<>();
                 double c1 = parentExploreValue * normalization_factor;
                 double c2 = exploreValue * normalization_factor;
-                
+
                 PointList points = edge.fetchWayGeometry(FetchMode.PILLAR_ONLY);
                 double prevLat = na.getLat(label.parent.node);
                 double prevLon = na.getLon(label.parent.node);
@@ -245,7 +258,8 @@ public class IsochroneResource {
                         c1));
                 for (int i = 0; i < points.size(); i++) {
                     traversedLength += segmentLengths[i];
-                    // Interpolate costs of pillar nodes using the Euclidean distances along the path.
+                    // Interpolate costs of pillar nodes using the Euclidean distances along the
+                    // path.
                     coordinates.add(new CoordinateWithCost(
                             points.getLat(i),
                             points.getLon(i),
