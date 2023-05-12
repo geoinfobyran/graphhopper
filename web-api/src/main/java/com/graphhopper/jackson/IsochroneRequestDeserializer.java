@@ -25,6 +25,9 @@ class IsochroneRequestDeserializer extends JsonDeserializer<IsochroneRequest> {
         if (treeNode.has("distanceLimitInMeters")) {
             request.setDistanceLimitInMeters(treeNode.get("distanceLimitInMeters").asLong());
         }
+        if (treeNode.has("useDistanceAsWeight")) {
+            request.setUseDistanceAsWeight(treeNode.get("useDistanceAsWeight").asBoolean());
+        }
         for (JsonNode polygonNode : treeNode.get("polygons")) {
             JsonNode regionNode = polygonNode.get("points");
             Region region = new Region();
