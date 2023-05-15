@@ -19,6 +19,7 @@ package com.graphhopper.jackson;
 
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.graphhopper.GHResponse;
+import com.graphhopper.IsochroneRequest;
 import com.graphhopper.ResponsePath;
 import com.graphhopper.json.Statement;
 import com.graphhopper.util.InstructionList;
@@ -29,6 +30,7 @@ import org.locationtech.jts.geom.Envelope;
 public class GraphHopperModule extends SimpleModule {
 
     public GraphHopperModule() {
+        addDeserializer(IsochroneRequest.class, new IsochroneRequestDeserializer());
         addDeserializer(Statement.class, new StatementDeserializer());
         addSerializer(Statement.class, new StatementSerializer());
         addDeserializer(GHResponse.class, new GHResponseDeserializer());

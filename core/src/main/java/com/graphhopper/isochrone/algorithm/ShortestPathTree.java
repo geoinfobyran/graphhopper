@@ -30,6 +30,7 @@ import com.graphhopper.util.GHUtility;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.PriorityQueue;
 import java.util.function.Consumer;
 
@@ -55,7 +56,7 @@ public class ShortestPathTree extends AbstractRoutingAlgorithm {
 
     public static class IsoLabel {
 
-        IsoLabel(int node, int edge, double weight, long time, double distance, IsoLabel parent) {
+        public IsoLabel(int node, int edge, double weight, long time, double distance, IsoLabel parent) {
             this.node = node;
             this.edge = edge;
             this.weight = weight;
@@ -125,17 +126,33 @@ public class ShortestPathTree extends AbstractRoutingAlgorithm {
     }
 
     public void search(int from, final Consumer<IsoLabel> consumer) {
+        List<Integer> fromList = new ArrayList<Integer>();
+        fromList.add(from);
+        search(false, fromList, consumer);
+    }
+
+    public void search(boolean useDistanceAsWeight, List<Integer> from, final Consumer<IsoLabel> consumer) {
+        List<IsoLabel> fromLabels = new ArrayList<>();
+        for (int node : from) {
+            IsoLabel currentLabel = new IsoLabel(node, -1, 0, 0, 0, null);
+            fromLabels.add(currentLabel);
+        }
+        searchFromLabels(useDistanceAsWeight, fromLabels, consumer);
+    }
+
+    public void searchFromLabels(boolean useDistanceAsWeight, List<IsoLabel> from, final Consumer<IsoLabel> consumer) {
         checkAlreadyRun();
-        IsoLabel currentLabel = new IsoLabel(from, -1, 0, 0, 0, null);
-        queueByWeighting.add(currentLabel);
-        if (traversalMode == TraversalMode.NODE_BASED) {
-            fromMap.put(from, currentLabel);
+        for (IsoLabel currentLabel : from) {
+            queueByWeighting.add(currentLabel);
+            if (traversalMode == TraversalMode.NODE_BASED) {
+                fromMap.put(currentLabel.node, currentLabel);
+                consumer.accept(currentLabel);
+            }
         }
         while (!queueByWeighting.isEmpty()) {
-            currentLabel = queueByWeighting.poll();
+            IsoLabel currentLabel = queueByWeighting.poll();
             if (currentLabel.deleted)
                 continue;
-            consumer.accept(currentLabel);
             currentLabel.deleted = true;
             visitedNodes++;
 
@@ -150,18 +167,23 @@ public class ShortestPathTree extends AbstractRoutingAlgorithm {
                     continue;
 
                 double nextDistance = iter.getDistance() + currentLabel.distance;
+                if (useDistanceAsWeight) {
+                    nextWeight = nextDistance;
+                }
                 long nextTime = GHUtility.calcMillisWithTurnMillis(weighting, iter, reverseFlow, currentLabel.edge) + currentLabel.time;
                 int nextTraversalId = traversalMode.createTraversalId(iter, reverseFlow);
                 IsoLabel label = fromMap.get(nextTraversalId);
+                IsoLabel newLabel = new IsoLabel(iter.getAdjNode(), iter.getEdge(), nextWeight, nextTime, nextDistance, currentLabel);
+                consumer.accept(newLabel);
                 if (label == null) {
-                    label = new IsoLabel(iter.getAdjNode(), iter.getEdge(), nextWeight, nextTime, nextDistance, currentLabel);
+                    label = newLabel;
                     fromMap.put(nextTraversalId, label);
                     if (getExploreValue(label) <= limit) {
                         queueByWeighting.add(label);
                     }
                 } else if (label.weight > nextWeight) {
                     label.deleted = true;
-                    label = new IsoLabel(iter.getAdjNode(), iter.getEdge(), nextWeight, nextTime, nextDistance, currentLabel);
+                    label = newLabel;
                     fromMap.put(nextTraversalId, label);
                     if (getExploreValue(label) <= limit) {
                         queueByWeighting.add(label);
