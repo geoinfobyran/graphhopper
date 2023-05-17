@@ -17,6 +17,7 @@
  */
 package com.graphhopper.resources;
 
+import com.graphhopper.NearestRequest;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.graphhopper.routing.util.EdgeFilter;
@@ -27,8 +28,10 @@ import com.graphhopper.util.DistanceCalcEarth;
 import com.graphhopper.util.shapes.GHPoint;
 import com.graphhopper.util.shapes.GHPoint3D;
 
+import java.util.List;
+
 import javax.inject.Inject;
-import javax.inject.Named;
+import javax.validation.constraints.NotNull;
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
 
@@ -42,36 +45,38 @@ public class NearestResource {
 
     private final DistanceCalc calc = DistanceCalcEarth.DIST_EARTH;
     private final LocationIndex index;
-    private final boolean hasElevation;
 
     @Inject
-    NearestResource(LocationIndex index, @Named("hasElevation") Boolean hasElevation) {
+    NearestResource(LocationIndex index) {
         this.index = index;
-        this.hasElevation = hasElevation;
     }
 
     public static class Response {
-        public final String type = "Point";
-        public final double[] coordinates;
-        public final double distance; // Distance from input to snapped point in meters
+        public final double[] distances; // Distances from inputs to snapped points in meters
 
         @JsonCreator
-        Response(@JsonProperty("coordinates") double[] coordinates, @JsonProperty("distance") double distance) {
-            this.coordinates = coordinates;
-            this.distance = distance;
+        Response(@JsonProperty("distances") double[] distances) {
+            this.distances = distances;
         }
     }
 
-    @GET
-    public Response doGet(@QueryParam("point") GHPoint point, @QueryParam("elevation") @DefaultValue("false") boolean elevation) {
-        Snap snap = index.findClosest(point.lat, point.lon, EdgeFilter.ALL_EDGES);
-        if (snap.isValid()) {
-            GHPoint3D snappedPoint = snap.getSnappedPoint();
-            double[] coordinates = hasElevation && elevation ? new double[]{snappedPoint.lon, snappedPoint.lat, snappedPoint.ele} : new double[]{snappedPoint.lon, snappedPoint.lat};
-            return new Response(coordinates, calc.calcDist(point.lat, point.lon, snappedPoint.lat, snappedPoint.lon));
-        } else {
-            throw new WebApplicationException("Nearest point cannot be found!");
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    public Response doPost(@NotNull NearestRequest request) {
+        double[] distances = new double[request.getPoints().size()];
+        List<GHPoint> points = request.getPoints();
+        for (int i = 0; i < points.size(); i++) {
+            GHPoint point = points.get(i);
+            Snap snap = index.findClosest(point.lat, point.lon, EdgeFilter.ALL_EDGES);
+            if (snap.isValid()) {
+                GHPoint3D snappedPoint = snap.getSnappedPoint();
+                distances[i] = calc.calcDist(point.lat, point.lon, snappedPoint.lat, snappedPoint.lon);
+            } else {
+                throw new WebApplicationException("Nearest point cannot be found!");
+            }
         }
+        return new Response(distances);
     }
 
 }

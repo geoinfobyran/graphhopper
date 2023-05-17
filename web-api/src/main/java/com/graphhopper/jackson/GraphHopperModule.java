@@ -20,6 +20,7 @@ package com.graphhopper.jackson;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.graphhopper.GHResponse;
 import com.graphhopper.IsochroneRequest;
+import com.graphhopper.NearestRequest;
 import com.graphhopper.ResponsePath;
 import com.graphhopper.json.Statement;
 import com.graphhopper.util.InstructionList;
@@ -31,6 +32,7 @@ public class GraphHopperModule extends SimpleModule {
 
     public GraphHopperModule() {
         addDeserializer(IsochroneRequest.class, new IsochroneRequestDeserializer());
+        addDeserializer(NearestRequest.class, new NearestRequestDeserializer());
         addDeserializer(Statement.class, new StatementDeserializer());
         addSerializer(Statement.class, new StatementSerializer());
         addDeserializer(GHResponse.class, new GHResponseDeserializer());
