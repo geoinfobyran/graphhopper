@@ -210,8 +210,11 @@ public class IsochroneResource {
         for (Map.Entry<Integer, Double> entry : nodeDistances.entrySet()) {
             int node = entry.getKey();
             double distance = entry.getValue();
-            // TODO: Set the weight and the time to reasonable values, if needed.
-            IsoLabel currentLabel = new IsoLabel(node, -1, 0, 0, distance, null);
+            // Set a weight penalizing long snapping distances.
+            double weight = distance * 10.0;
+            // The time isn't used, so we just set it to 0.
+            long time = 0;
+            IsoLabel currentLabel = new IsoLabel(node, -1, weight, time, distance, null);
             fromLabels.add(currentLabel);
         }
         Collection<Coordinate> sites = new ArrayList<>();
