@@ -212,6 +212,9 @@ public class IsochroneResource {
             double distance = entry.getValue();
             // Set a weight penalizing long snapping distances.
             double weight = distance * 10.0;
+            if (request.getUseDistanceAsWeight()) {
+                weight = distance;
+            }
             // The time isn't used, so we just set it to 0.
             long time = 0;
             IsoLabel currentLabel = new IsoLabel(node, -1, weight, time, distance, null);

@@ -168,7 +168,7 @@ public class ShortestPathTree extends AbstractRoutingAlgorithm {
 
                 double nextDistance = iter.getDistance() + currentLabel.distance;
                 if (useDistanceAsWeight) {
-                    nextWeight = iter.getDistance() + currentLabel.weight;
+                    nextWeight = nextDistance;
                 }
                 long nextTime = GHUtility.calcMillisWithTurnMillis(weighting, iter, reverseFlow, currentLabel.edge) + currentLabel.time;
                 int nextTraversalId = traversalMode.createTraversalId(iter, reverseFlow);
